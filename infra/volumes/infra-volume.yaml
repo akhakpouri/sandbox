@@ -1,0 +1,37 @@
+# Defines a 1Gi presistent volume backed by local disk
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: infra-pv
+  labels:
+    type: local
+    environment: infra
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  # Access modes defien how pods can mounth this volume:
+  # ReadWriteOnce (RWO): Single node read-write
+  # ReadOnlyMany (ROX): Multiple nodes read-only
+  # ReadWriteMany (RWX): Multiple nodes read-write
+  accessModes:
+    - ReadWriteOnce
+
+  # What happens when the bound PVC is deleted:
+  # Retain: Keep the PV and data manual cleanup
+  # Delete: Remove the PV and underlying storage
+  # Recylce: Clear data and make PV available aghain (depercated)
+  persistentVolumeReclaimPolicy: Retain
+
+  #StorageClass nmame matches PVC
+  #Empty streing means this PV won't match PVC's requesting a specific class
+  storageClassName: infra
+
+  #Mount options passed to the underlyuing storage system
+  mountOptions:
+    - hard
+    - nfsvers=4.1
+  
+  nfs:
+    path: /tmp
+    server: 172.17.0.2
