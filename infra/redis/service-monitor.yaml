@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sm-redis
+  namespace: infra
+  labels:
+    release: infra-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: redis-app
+  endpoints:
+    - port: metrics # named port from the service
+      interval: 30s
+      path: /metrics

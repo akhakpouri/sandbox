@@ -15,6 +15,12 @@ spec:
       labels:
         app: redis-app
     spec:
+      initContainers:
+        - name: redis-sidecar
+          image: oliver006/redis_exporter
+          restartPolicy: Always
+          ports:
+            - containerPort: 9121
       containers:
         - name: redis
           image: redis

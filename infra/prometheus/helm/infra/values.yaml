@@ -1,0 +1,13 @@
+grafana:
+  enabled: true
+  namespaceOverride: "infra"
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi

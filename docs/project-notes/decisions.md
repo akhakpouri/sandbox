@@ -2,6 +2,22 @@
 
 Architectural decisions and the reasoning behind them. Newest first.
 
+## ArgoCD and Vault added to the `infra` plan, both via Helm chart — 2026-08-18
+Extends the build order: after Grafana (in progress) is finished, add **Vault**, then **ArgoCD**, both to `infra`, both installed via their official Helm charts (`hashicorp/vault`, `argo-helm/argo-cd`) — not hand-written manifests.
+
+Order: Vault before ArgoCD. Vault has zero dependency on anything else in the cluster — same "zero deps, good next standalone deploy" reasoning that put redis first originally. ArgoCD is more useful once there are a few real components already deployed for it to manage; less useful as the very next thing added.
+
+Chart-vs-hand-written, and why this isn't the same call as Grafana: hand-writing Vault in dev mode (single Deployment, no unseal/storage backend complexity) was floated first, using the same "low boilerplate → hand-write it" reasoning that kept Grafana hand-rolled. Explicitly overridden by the user: this project has two coexisting learning goals, not one — (1) learn core K8s primitives by hand-writing manifests (redis, Grafana), and (2) learn to operate real platform-engineering tooling *efficiently*, via its official Helm chart plus values overrides, the way it's actually run on a real platform team. ArgoCD and Vault fall under goal 2 — install via chart, configure via values as needed, don't rebuild the stack by hand first.
+
+Open question, deliberately unresolved for now: whether ArgoCD ends up pointed at this repo as a GitOps source — a real shift from "hand-run `kubectl apply` yourself" to "commit and let the controller reconcile." Revisit once ArgoCD is actually being installed, not before.
+
+## Prometheus via kube-prometheus-stack Helm chart; Grafana stays hand-written — 2026-08-18
+Scoped reversal of "No Helm/Kustomize" below, for Prometheus only. Hand-writing bare Prometheus is mostly RBAC for Kubernetes service discovery and a scrape-config ConfigMap — boilerplate that's nearly identical across every cluster, low learning value per line. [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) is the de facto standard way this stack is actually deployed in production, so operating the chart is itself a directly useful skill to build. It installs via the Prometheus Operator (a controller reconciling `Prometheus`/`Alertmanager`/`ServiceMonitor`/`PodMonitor`/`PrometheusRule` CRDs), and bundles Alertmanager, node-exporter (DaemonSet), and kube-state-metrics — all previously listed as "considered but not scaffolded" in `facts.md`.
+
+Grafana stays hand-written (plain `Deployment`, no chart) — wiring it to Prometheus's in-cluster Service DNS as a datasource is a genuinely new exercise, not boilerplate (same "component B talks to component A" shape as mongo-express→mongodb). Bundled Grafana is disabled via a `grafana.enabled: false` values override rather than accepted from the chart.
+
+Working notes for whoever (future self) installs this: read `helm template` output before `helm install` — treat the chart as inspectable, not a black box, same instinct as `kubectl apply --dry-run=client` elsewhere in this repo. This chart's CRDs install only on first `helm install` and are never auto-upgraded or deleted by Helm — re-apply `crds/` manually after a chart version bump that changes them.
+
 ## Shared dummy credentials across mongodb and mongodb-express — 2026-08-15
 `mongodb/secret.yaml` and `mongodb-express/secret.yaml` contain identical base64 values. Treated as intentional for this sandbox (mongo-express authenticates as the mongo root user), not a copy-paste bug — don't "fix" by generating different values without confirming with the user first.
 
