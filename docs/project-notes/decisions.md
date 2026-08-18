@@ -2,6 +2,15 @@
 
 Architectural decisions and the reasoning behind them. Newest first.
 
+## ArgoCD and Vault added to the `infra` plan, both via Helm chart — 2026-08-18
+Extends the build order: after Grafana (in progress) is finished, add **Vault**, then **ArgoCD**, both to `infra`, both installed via their official Helm charts (`hashicorp/vault`, `argo-helm/argo-cd`) — not hand-written manifests.
+
+Order: Vault before ArgoCD. Vault has zero dependency on anything else in the cluster — same "zero deps, good next standalone deploy" reasoning that put redis first originally. ArgoCD is more useful once there are a few real components already deployed for it to manage; less useful as the very next thing added.
+
+Chart-vs-hand-written, and why this isn't the same call as Grafana: hand-writing Vault in dev mode (single Deployment, no unseal/storage backend complexity) was floated first, using the same "low boilerplate → hand-write it" reasoning that kept Grafana hand-rolled. Explicitly overridden by the user: this project has two coexisting learning goals, not one — (1) learn core K8s primitives by hand-writing manifests (redis, Grafana), and (2) learn to operate real platform-engineering tooling *efficiently*, via its official Helm chart plus values overrides, the way it's actually run on a real platform team. ArgoCD and Vault fall under goal 2 — install via chart, configure via values as needed, don't rebuild the stack by hand first.
+
+Open question, deliberately unresolved for now: whether ArgoCD ends up pointed at this repo as a GitOps source — a real shift from "hand-run `kubectl apply` yourself" to "commit and let the controller reconcile." Revisit once ArgoCD is actually being installed, not before.
+
 ## Prometheus via kube-prometheus-stack Helm chart; Grafana stays hand-written — 2026-08-18
 Scoped reversal of "No Helm/Kustomize" below, for Prometheus only. Hand-writing bare Prometheus is mostly RBAC for Kubernetes service discovery and a scrape-config ConfigMap — boilerplate that's nearly identical across every cluster, low learning value per line. [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) is the de facto standard way this stack is actually deployed in production, so operating the chart is itself a directly useful skill to build. It installs via the Prometheus Operator (a controller reconciling `Prometheus`/`Alertmanager`/`ServiceMonitor`/`PodMonitor`/`PrometheusRule` CRDs), and bundles Alertmanager, node-exporter (DaemonSet), and kube-state-metrics — all previously listed as "considered but not scaffolded" in `facts.md`.
 

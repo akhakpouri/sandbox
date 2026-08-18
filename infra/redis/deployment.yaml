@@ -21,7 +21,6 @@ spec:
           restartPolicy: Always
           ports:
             - containerPort: 9121
-
       containers:
         - name: redis
           image: redis
