@@ -10,6 +10,11 @@ spec:
   selector:
     app: redis-app
   ports:
-    - protocol: TCP
+    - name: redis
+      protocol: TCP
       port: 6379
       targetPort: 6379
+    - name: metrics
+      protocol: TCP
+      port: 9121
+      targetPort: 9121
