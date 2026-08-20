@@ -1,0 +1,7 @@
+server:
+  dev:
+    enabled: true #dev mode; single pod, in-memory storage
+  service:
+    type: NodePort
+injector:
+  enabled: false
