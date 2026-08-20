@@ -2,6 +2,16 @@
 
 Architectural decisions and the reasoning behind them. Newest first.
 
+## Bundled Grafana kept instead of hand-written — 2026-08-20
+Supersedes the "Grafana stays hand-written" half of the 2026-08-18 Prometheus decision below. At some point `grafana.enabled` in `infra/prometheus/helm/infra/values.yaml` was flipped from `false` to `true` outside of any recorded decision — the bundled Grafana subchart turned out to already be running in the `infra` namespace (pod `infra-prometheus-grafana-*`, 46+ hours old when this was noticed on 2026-08-20), while `facts.md` and `infra/grafana/CLAUDE.md` still said "not yet created."
+
+Rather than reverting to match the stale docs, decided to keep the bundled instance and update the docs to match reality instead:
+- The chart auto-provisions both a `Prometheus` and an `Alertmanager` datasource (confirmed via the `infra-prometheus-kube-prom-grafana-datasource` ConfigMap) — no manual datasource wiring needed, so the "genuinely new exercise" reasoning from 2026-08-18 no longer applies.
+- No standalone `infra/grafana/` manifests will be written — that plan is dropped.
+- Admin credentials come from the chart's auto-generated `infra-prometheus-grafana` Secret (`admin-user`/`admin-password` keys), not overridden.
+
+Net effect: Grafana moves from "hand-written, goal-2-style learning exercise" to "chart-managed, same as Prometheus." Doesn't affect the Vault/ArgoCD entry below — that reasoning was about Vault and ArgoCD specifically, not Grafana.
+
 ## ArgoCD and Vault added to the `infra` plan, both via Helm chart — 2026-08-18
 Extends the build order: after Grafana (in progress) is finished, add **Vault**, then **ArgoCD**, both to `infra`, both installed via their official Helm charts (`hashicorp/vault`, `argo-helm/argo-cd`) — not hand-written manifests.
 
