@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: localstack-deployment
+  namespace: infra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: localstack-app
+  template:
+    metadata:
+      labels:
+        app: localstack-app
+    spec:
+      serviceAccountName: localstack-sa
+      initContainers:
+        - name: vault-fetch
+          image: hashicorp/vault
+          env:
+            - name: VAULT_ADDR
+              value: http://infra-vault.infra.svc.cluster.local:8200
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              LOGIN_TOKEN=$(vault write -field=token auth/kubernetes/login \
+                role=localstack \
+                jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token)
+              VAULT_TOKEN="$LOGIN_TOKEN" vault kv get -field=auth-token secret/localstack > /vault/secrets/token
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+        - name: k8s-secret-sync
+          image: bitnami/kubectl
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              kubectl create secret generic localstack-vault-secret \
+                --from-literal=auth-token="$(cat /vault/secrets/token)" \
+                --namespace=infra \
+                --dry-run=client -o yaml | kubectl apply -f -
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+      volumes:
+        - name: vault-secrets
+          emptyDir: {}
+      containers:
+        - name: localstack
+          image: localstack/localstack
+          resources:
+            requests:
+              memory: "250Mi"
+              cpu: "250m"
+            limits:
+              memory: "500Mi"
+              cpu: "500m"
+          ports:
+            - containerPort: 4566
+          env:
+            - name: SERVICES
+              valueFrom:
+                configMapKeyRef:
+                  name: localstack-cm
+                  key: services
+            - name: LOCALSTACK_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: localstack-vault-secret
+                  key: auth-token

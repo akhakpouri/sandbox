@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: localstack-cm
+  namespace: infra
+data:
+  services: "sqs, sns"
