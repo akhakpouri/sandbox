@@ -4,6 +4,35 @@ Bug log with root cause and solution once resolved. Newest first.
 
 ## Resolved
 
+### K8s RBAC `resourceNames` silently blocks `create` instead of leaving it unrestricted — 2026-08-20
+While wiring up a `Role` so `localstack-sa` could write one specific Secret (`localstack-vault-secret`) via an initContainer, `kubectl auth can-i create secrets --as=system:serviceaccount:infra:localstack-sa -n infra` kept returning `no` despite the `Role`'s verbs including `create` and the matching `RoleBinding` existing and being correctly wired (right `roleRef`, right `subjects`).
+
+Root cause: a `create` request has no object name in its URL (you POST to the collection endpoint, not a named resource) — Kubernetes docs note this is *why* `create` can't be scoped by `resourceNames`. What that actually means in practice, and what got this wrong the first time: the RBAC authorizer treats the request's name as empty string `""` for a `create`, and checks whether `""` is in the rule's `resourceNames` list. Since it never is (the list only ever contains real names), a rule combining `create` with a non-empty `resourceNames` **never matches `create` at all** — it doesn't fall back to unrestricted, it silently grants nothing for that verb through that rule.
+
+**Fix:** put `create` in its own rule with no `resourceNames`, and keep `resourceNames` only on the verbs that actually support it (`get`, `update`, `patch`, `delete`):
+```yaml
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "update", "patch"]
+    resourceNames: ["localstack-vault-secret"]
+```
+Confirmed via `kubectl auth can-i create secrets --as=<sa> -n <ns>` before restarting anything — worth using that command generally to test RBAC changes without waiting on a pod restart cycle.
+
+**Status:** resolved — general K8s RBAC gotcha, not specific to this cluster; applies to any `Role`/`ClusterRole` that tries to scope `create` by name.
+
+### LocalStack requires `LOCALSTACK_AUTH_TOKEN` even for free/community-tier services — 2026-08-20
+Deployed LocalStack (`SERVICES=sqs,sns`, both nominally free/Community services) and the pod crash-looped immediately: `License activation failed! ... No credentials were found in the environment. Please make sure to either set the LOCALSTACK_AUTH_TOKEN variable...` (exit code 55). Assumption going in was that this only applied to Pro features — SQS/SNS shouldn't need any token at all.
+
+Root cause (confirmed via LocalStack's own changelog, not guessed): as of version 2026.03.0 (March 23, 2026), LocalStack merged the Community and Pro Docker images into one, and `localstack/localstack:latest` now requires *some* valid auth token to start at all, regardless of which services are configured. A grace-period flag (`LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT=1`, snoozed until 2026-04-06) exists but is already expired.
+
+**Fix:** the free tier still genuinely exists — sign up at app.localstack.cloud (~90 seconds) for a free Hobby-plan token, set it as `LOCALSTACK_AUTH_TOKEN`. (Alternative avoiding any account: pin the image to `localstack/localstack:4.4.0`, the last pre-merge release — trades away a maintained image.) In this repo the token is delivered via Vault rather than a plain `Secret` — see `infra/localstack/CLAUDE.md` and `decisions.md` 2026-08-20 entry for the full wiring.
+
+**Status:** resolved — applies to any fresh LocalStack pull from here on, not specific to this cluster.
+
 ### `VAULT_TOKEN` env var silently overrides `vault login`, masking policy restrictions — 2026-08-20
 Set up a `userpass` user (`alice`) scoped to a narrow read-only policy, logged in as her with `vault login -method=userpass ...`, and she could still read/write secrets the policy should have blocked. `vault login` reported success and showed the correct scoped-down `token_policies` in its own output — looked like it worked.
 

@@ -1,0 +1,27 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: localstack-vault-secret-writer
+  namespace: infra
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "update", "patch"]
+    resourceNames: ["localstack-vault-secret"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: localstack-vault-secret-writer-binding
+  namespace: infra
+subjects:
+  - kind: ServiceAccount
+    name: localstack-sa
+    namespace: infra
+roleRef:
+  kind: Role
+  name: localstack-vault-secret-writer
+  apiGroup: rbac.authorization.k8s.io
