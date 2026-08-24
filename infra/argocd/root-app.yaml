@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+  # Finalizer ensures managed resources are deleted when the app is deleted
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default #list by k get approjects.argoproj.io -n argocd
+  source:
+    repoURL: https://github.com/akhakpouri/sandbox.git
+    targetRevision: HEAD
+    path: infra/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true #delete all resources no longer in git
+      selfHeal: true #overwrite manual cluster changes
+    syncOptions:
+      - CreateNamespace=true
