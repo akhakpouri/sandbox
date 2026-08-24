@@ -15,7 +15,7 @@ spec:
         releaseName: infra-vault
         valueFiles:
           - $values/infra/vault/helm/infra/values.yaml
-    - repoUrl: https://github.com/akhakpouri/sandbox.git
+    - repoURL: https://github.com/akhakpouri/sandbox.git
       targetRevision: HEAD
       ref: values #this is referenced to $values in line 17
   destination:
