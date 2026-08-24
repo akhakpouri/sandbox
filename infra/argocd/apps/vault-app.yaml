@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault-app
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  sources:
+    - repoURL: https://helm.releases.hashicorp.com
+      chart: vault
+      targetRevision: 0.34.1
+      helm:
+        releaseName: infra-vault
+        valueFiles:
+          - $values/infra/vault/helm/infra/values.yaml
+    - repoUrl: https://github.com/akhakpouri/sandbox.git
+      targetRevision: HEAD
+      ref: values #this is referenced to $values in line 17
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infra #the desired destination
+  syncPolicy:
+    automated:
+      prune: true #delete all resources no longer in git
+      selfHeal: true #overwrite manual cluster changes
+    syncOptions:
+      - CreateNamespace=true
