@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-app
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 88.4.0
+      helm:
+        releaseName: infra-prometheus
+        valueFiles:
+          - $values/infra/prometheus/helm/infra/values.yaml
+    - repoURL: https://github.com/akhakpouri/sandbox.git
+      targetRevision: HEAD
+      ref: values #this is referenced to $values in line 16
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infra #the desired destination
+  syncPolicy:
+    automated:
+      prune: true #delete all resources no longer in git
+      selfHeal: true #overwrite manual cluster changes
+    syncOptions:
+      - CreateNamespace=true
