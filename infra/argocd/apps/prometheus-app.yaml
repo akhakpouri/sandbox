@@ -27,3 +27,4 @@ spec:
       selfHeal: true #overwrite manual cluster changes
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true
