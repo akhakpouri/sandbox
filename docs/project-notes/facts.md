@@ -5,8 +5,8 @@ Project configuration: ports, namespaces, images, service names. Not a place for
 ## Namespaces
 - `default` — mongodb (`db/mongodb/`), mongodb-express (`dashboard/mongodb-express/`). Manifests exist but nothing is currently applied — `kubectl get all -n default` is empty besides the built-in `kubernetes` service.
 - `kubernetes-dashboard` — dashboard ingress target (Dashboard itself installed out-of-band, not by this repo)
-- `infra` — observability/infra/platform tooling: redis + prometheus + vault + grafana + localstack (all deployed), argocd (planned) (see `decisions.md` for why this is separate from `default`)
-- `database` — **not managed by this repo.** A `postgres-app` StatefulSet + `postgres-service` run here, deployed out-of-band with no matching manifest anywhere in git. Discovered 2026-08-20 during a docs-accuracy pass. Documented here so it isn't mistaken for orphaned state; treat as read-only/hands-off unless the user says otherwise.
+- `infra` — observability/infra/platform tooling: redis + prometheus + vault + grafana + localstack + argocd (all deployed) (see `decisions.md` for why this is separate from `default`)
+- `database` — **not managed by this repo.** A `postgres-app` StatefulSet + `postgres-service` run here, deployed out-of-band with no matching manifest anywhere in git. Discovered 2026-08-20 during a docs-accuracy pass. Documented here so it isn't mistaken for orphaned state; treat as read-only/hands-off unless the user says otherwise. Its relationship to the planned CloudNativePG-managed Postgres is an open question — see `decisions.md` 2026-08-25 entry.
 
 ## Components
 
@@ -20,12 +20,14 @@ Project configuration: ports, namespaces, images, service names. Not a place for
 | vault | Helm — `hashicorp/vault`, release `infra-vault` | 8200 (API/UI), 8201 (cluster) | NodePort (`infra-vault`, NodePort 31978 for 8200) | `infra` namespace; dev mode (`server.dev.enabled: true`) — single pod, in-memory storage, already unsealed, no HA; Agent Injector disabled (`injector.enabled: false`); root token is the chart default (`root`), not overridden; values override at `infra/vault/helm/infra/values.yaml`; Kubernetes auth method enabled (see localstack row) — see `decisions.md` 2026-08-18 entry |
 | grafana | Helm — bundled `grafana` subchart of `kube-prometheus-stack`, release `infra-prometheus` | 80 | ClusterIP (`infra-prometheus-grafana`), access via `kubectl port-forward -n infra svc/infra-prometheus-grafana 3000:80` | `infra` namespace; enabled via `grafana.enabled: true` in `infra/prometheus/helm/infra/values.yaml`; no standalone manifests, no separate release; admin creds in auto-generated `infra-prometheus-grafana` Secret (`admin-user`/`admin-password`), not overridden; `Prometheus` + `Alertmanager` datasources auto-provisioned via the `infra-prometheus-kube-prom-grafana-datasource` ConfigMap; see `decisions.md` 2026-08-20 entry |
 | localstack | `localstack/localstack` | 4566 (edge), 4510 | NodePort (`localstack-service`) | `infra` namespace; hand-written manifests; `SERVICES=sqs,sns` via `localstack-cm` ConfigMap; `LOCALSTACK_AUTH_TOKEN` delivered from Vault (`secret/localstack`) via a two-step initContainer chain (`vault-fetch` + `k8s-secret-sync`) into a native `localstack-vault-secret` Secret — first real consumer of a Vault secret in this cluster; dedicated `localstack-sa` ServiceAccount bound to Vault's `localstack` Kubernetes-auth role; see `infra/localstack/CLAUDE.md` and `decisions.md` 2026-08-20 entry |
+| argocd | Helm — `argo-helm/argo-cd`, release `argocd` | 8080 (server, via `kubectl port-forward`) | ClusterIP (`argocd-server`) | own dedicated `argocd` namespace, not `infra` — deliberate split from the workloads it manages; `dex`/`notifications` disabled (nothing configured to use either); `server.insecure: true` for plain-HTTP port-forward access; App-of-Apps pattern, `root-app` watching `infra/argocd/apps/` in this same repo; values override at `infra/argocd/helm/argocd/values.yaml`; see `infra/argocd/CLAUDE.md` and `decisions.md` 2026-08-24 entry for full migration status |
 
 **Planned, not yet created:**
 
 | Component | Install method | Notes |
 |---|---|---|
-| argocd | Helm — `argo-helm/argo-cd` | zero deps besides vault (done); open question whether it gets pointed at this repo as a GitOps source — see `decisions.md` 2026-08-18 entry |
+| cloudnative-pg | Helm — `cnpg/cloudnative-pg` | Postgres operator (`Cluster` CRD); relationship to the existing out-of-band `postgres-app` StatefulSet (`database` ns) unresolved — see `decisions.md` 2026-08-25 entry |
+| rook-ceph | Helm — `rook-release/rook-ceph` + `rook-ceph-cluster` | Distributed storage for on-prem/no-cloud; single-node minikube topology limits real distributed value until multi-node — see `decisions.md` 2026-08-25 entry |
 
 **Present but unused (`infra/` scratch/tutorial work, not deployed):**
 

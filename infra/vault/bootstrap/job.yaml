@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-post-sync
+  namespace: infra
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  ttlSecondsAfterFinished: 100
+  template:
+    spec:
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.15.2
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Verifying Vault connection..."
+              vault status
+
+              echo "==> Enabling kubernetes auth method"
+              if vault auth list -format=json | grep -q '"kubernetes/"'; then
+                echo "    already enabled"
+              else
+                vault auth enable kubernetes
+              fi
+
+              echo "==> Configuring kubernetes auth"
+              vault write auth/kubernetes/config \
+                kubernetes_host="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+
+              echo "==> Writing policy 'localstack-read'"
+              cat <<'EOF' > /tmp/policy.hcl
+              path "secret/data/localstack" {
+                capabilities = ["read"]
+              }
+              EOF
+              vault policy write localstack-read /tmp/policy.hcl
+
+              echo "==> Binding role 'localstack' to localstack-sa in infra"
+              vault write auth/kubernetes/role/localstack \
+                bound_service_account_names=localstack-sa \
+                bound_service_account_namespaces=infra \
+                policies=localstack-read \
+                ttl=24h
+
+              echo "==> Writing $VAULT_KV_PATH"
+              printf '%s' "$AUTH_TOKEN" | vault kv put "$VAULT_KV_PATH" auth-token=-
+
+              echo "Vault bootstrap completed successfully!"
+          env:
+            - name: VAULT_ADDR
+              value: http://infra-vault.infra.svc.cluster.local:8200
+            - name: VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vault-bootrap-secret
+                  key: VAULT_TOKEN
+            - name: AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vault-bootrap-secret
+                  key: AUTH_TOKEN
+            - name: VAULT_KV_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: vault-bootrap-secret
+                  key: SECRET_PATH
+      restartPolicy: Never

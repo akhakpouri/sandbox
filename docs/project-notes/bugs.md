@@ -4,6 +4,25 @@ Bug log with root cause and solution once resolved. Newest first.
 
 ## Resolved
 
+### kube-prometheus-stack CRDs fail to sync via ArgoCD — annotation too long (262144 bytes) — 2026-08-24
+Wrote `prometheus-app.yaml` as a multi-source ArgoCD Application (same shape as `vault-app` — an upstream Helm chart source plus this repo as a `ref: values` source), pointing at the already-installed `kube-prometheus-stack` release (`infra-prometheus`, chart `88.4.0`) for a clean adopt. Most resources adopted fine, same benign "missing `last-applied-configuration` annotation... will be patched automatically" warning seen adopting Vault — but six CRDs failed outright:
+```
+CustomResourceDefinition alertmanagers.monitoring.coreos.com — Failed — SyncFailed
+error when patching: metadata.annotations: Too long: may not be more than 262144 bytes
+```
+(Same failure on `alertmanagerconfigs`, `thanosrulers`, `prometheuses`, `scrapeconfigs`, `prometheusagents` — every CRD this chart ships.)
+
+Root cause: a hard Kubernetes limit (256KiB per annotation), not an ArgoCD bug. ArgoCD defaults to client-side apply — the same mechanism plain `kubectl apply` uses — which works by stuffing the *entire* previous manifest into a `kubectl.kubernetes.io/last-applied-configuration` annotation so it can 3-way-diff against it next time. `kube-prometheus-stack`'s CRDs (`Prometheus`, `Alertmanager`, etc.) have enormous generated OpenAPI schemas, large enough that the full manifest blows past that 256KiB ceiling. This is also *why* Helm itself doesn't `kubectl apply` these CRDs on `helm install` — it does a raw `create` instead, sidestepping the annotation entirely (see the 2026-08-18 `decisions.md` entry: "This chart's CRDs install only on first `helm install`... re-apply `crds/` manually after a chart version bump").
+
+**Fix:** add `ServerSideApply=true` to the Application's `syncOptions`. Server-side apply uses the API server's native field-ownership tracking instead of the `last-applied-configuration` annotation, so there's no size ceiling to hit:
+```yaml
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+```
+
+**Status:** resolved and verified 2026-08-25 — pushed/merged to `main`, `prometheus-app` now shows `Synced`/`Healthy`, all six CRDs confirmed present and healthy.
+
 ### K8s RBAC `resourceNames` silently blocks `create` instead of leaving it unrestricted — 2026-08-20
 While wiring up a `Role` so `localstack-sa` could write one specific Secret (`localstack-vault-secret`) via an initContainer, `kubectl auth can-i create secrets --as=system:serviceaccount:infra:localstack-sa -n infra` kept returning `no` despite the `Role`'s verbs including `create` and the matching `RoleBinding` existing and being correctly wired (right `roleRef`, right `subjects`).
 
