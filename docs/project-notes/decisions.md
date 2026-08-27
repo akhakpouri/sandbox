@@ -2,6 +2,17 @@
 
 Architectural decisions and the reasoning behind them. Newest first.
 
+## Learning project: "hello world" Kubernetes operator in Go — shelved, 2026-08-27
+Goal is learning to write an operator, not adding a platform component — motivated by the CloudNativePG/Prometheus-Operator entries above, where this repo *consumes* the operator pattern but nothing here has ever *written* one. Design was brainstormed and agreed, then explicitly shelved before a spec/plan was written — pick back up later starting from this entry.
+
+**Where it lives:** new top-level `operators/hello-world-operator/`, parallel to `infra/`, `db/`, `dashboard/` — not under `infra/`. This will be the first actual application source code in this repo; everything to date (`infra/` especially) has only ever held manifests and Helm `values.yaml` overrides, never source you build. `operators/` is a deliberate new convention for that distinction.
+
+**Tooling:** `kubebuilder` (not `operator-sdk`, not hand-rolled `controller-runtime`) — the standard Go operator scaffolder, generates CRD Go types, controller stub, and RBAC/CRD YAML from kubebuilder markers, built on the same `controller-runtime` library real operators (CloudNativePG, Prometheus Operator) use. Not yet installed (`brew install kubebuilder` still needed).
+
+**Design agreed:** a custom CRD `HelloWorld` (API group `hello.akhakpouri.dev/v1`, `spec.message string`), reconciled by creating/owning a child `ConfigMap` (`<name>-greeting`, `data.message = spec.message`) with an `OwnerReference` back to the `HelloWorld` for garbage collection on delete, and `status.observedGeneration`/`status.configMapRef` set on write. Chose "own a child resource" over a status-only stub deliberately — that's the actually distinctive operator behavior (reconciling desired state by managing another resource), same shape as CloudNativePG owning Pods/PVCs/Services for its `Cluster` CRD, not just a CRD+controller-runtime mechanics exercise.
+
+**Scope for v1, deliberately deferred:** run as a local Go process against minikube (`make install` + `make run`, existing kubeconfig context) — no Docker build/push, no in-cluster `Deployment`, no ArgoCD wiring. Containerizing and deploying it like the rest of `infra/` is a natural follow-up once the basic reconcile loop works, not part of the first pass.
+
 ## PostgreSQL via CloudNativePG, backed by Rook/Ceph for distributed storage — planned, 2026-08-25
 Next additions after the ArgoCD migration (below) is finished: **PostgreSQL**, run via the **CloudNativePG** (CNPG) operator, with its `Cluster` CRD-managed instances backed by **Rook**-provisioned **Ceph** storage rather than a cloud storage class. Both via their official Helm charts (`cnpg/cloudnative-pg`, `rook-release/rook-ceph` + `rook-ceph-cluster`) — same "operate real platform tooling via its official chart" reasoning already applied to Vault/Prometheus/ArgoCD, not hand-rolled manifests.
 
